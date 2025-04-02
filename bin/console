@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+
+$LOAD_PATH.unshift(File.expand_path(File.join(File.dirname(__FILE__), 'lib')))
+
+require "bundler/setup"
+
+require 'json'
+require 'json-schema'
+require 'dry-schema'
+require 'dry-validation'
+require 'concurrent'
+require 'pg'
+require "irb"
+
+IRB.start(__FILE__)
+
