@@ -6,6 +6,7 @@ require 'dry-schema'
 require 'dry-validation'
 require 'concurrent'
 require 'pg'
+require 'faraday'
 require './model_context_protocol/lib/model_context_protocol.rb'
 
 database_url = ENV["DATABASE_URL"]
@@ -26,18 +27,7 @@ server = ModelContextProtocol::Server::McpServer.new({
 # Add resource listing capability using PG directly
 server.override_request_handler("resources/list") do |params|
   begin
-    # Make sure conn is your PG connection object
-    result = conn.exec("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
-
-    resources = result.map do |row|
-      table_name = row["table_name"]
-      uri = "#{resource_base_url}/#{table_name}/#{SCHEMA_PATH}"
-      {
-        uri: uri,
-        mimeType: "application/json",
-        name: "\"#{table_name}\" database schema"
-      }
-    end
+     resources = []
 
     { resources: resources }
   rescue => e
@@ -48,111 +38,36 @@ end
 # Add resource reading capability using PG directly
 server.override_request_handler("resources/read") do |params|
   begin
-    uri = params[:uri]
-
-    resource_url = URI.parse(uri)
-    path_components = resource_url.path.split("/")
-    schema = path_components.pop
-    table_name = path_components.pop
-
-    if schema != SCHEMA_PATH
-      raise "Invalid resource URI"
-    end
-
-    # Query for table columns using PG
-    result = conn.exec_params(
-      "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = $1",
-      [table_name]
-    )
-
-    if result.ntuples > 0
-      contents = [{
-        uri: uri,
-        mimeType: "application/json",
-        text: JSON.generate(result.map { |row| row })
-      }]
+      contents = []
 
       { contents: contents }
-    else
-      raise "Table '#{table_name}' not found"
-    end
   rescue => e
     { error: e.message }
   end
 end
 
-# List resources handler
-server.tool("list_resources", {
-  "type": "object",
-  "properties": {}
-}) do |params|
-  begin
-    result = conn.exec("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
-    resources = result.map do |row|
-      table_name = row["table_name"]
-      uri = "#{resource_base_url}/#{table_name}/#{SCHEMA_PATH}"
-      {
-        uri: uri,
-        mimeType: "application/json",
-        name: "\"#{table_name}\" database schema"
-      }
-    end
-
-    {
-      content: [
-        { type: "text", text: JSON.generate({ resources: resources }) }
-      ]
-    }
-  rescue => e
-    {
-      content: [
-        { type: "text", text: "Error: #{e.message}" }
-      ],
-      is_error: true
-    }
-  end
-end
-
 # Read resource handler
-server.tool("read_resource", {
-  "type": "object",
-  "properties": {
-    "uri": {
-      "type": "string"
-    }
-  },
-  "required": ["uri"]
-}) do |params|
+server.tool("get_recent_flow_instance_errors", { type: "object", properties: {}}) do |params|
   begin
-    resource_url = URI.parse(params[:uri])
-    path_components = resource_url.path.split("/")
-    schema = path_components.pop
-    table_name = path_components.pop
+    result = Faraday.get('http://@host.docker.local:5000/api/v1/flow_instances/recent')
 
-    if schema != SCHEMA_PATH
-      raise "Invalid resource URI"
-    end
-
-    result = conn.exec_params(
-      "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1",
-      [table_name]
-    )
+    flow_instances = JSON.parse(result.body).dig("results")
 
     {
-      content: [
+      content: flow_instances.map do |flow_instance|
         {
           type: "text",
           text: JSON.generate({
             contents: [
               {
-                uri: params[:uri],
+                uri: "http://@host.docker.local:5000/api/v1/flow_instances/#{flow_instance.dig("id")}",
                 mimeType: "application/json",
-                text: JSON.generate(result.to_a)
+                text: JSON.generate(flow_instance)
               }
             ]
           })
         }
-      ]
+      end
     }
   rescue => e
     {
@@ -161,43 +76,6 @@ server.tool("read_resource", {
       ],
       is_error: true
     }
-  end
-end
-
-# Query tool
-server.tool("query", {
-  "type": "object",
-  "properties": {
-    "sql": {
-      "type": "string",
-      "description": "A Postgres SQL query string"
-    }
-  },
-  "required": ["sql"]
-}) do |params|
-  begin
-    sql = params[:sql]
-    conn.exec("BEGIN TRANSACTION READ ONLY")
-    result = conn.exec(sql)
-
-    {
-      content: [
-        { type: "text", text: JSON.generate(result.to_a) }
-      ]
-    }
-  rescue => e
-    {
-      content: [
-        { type: "text", text: "Error: #{e.message}" }
-      ],
-      is_error: true
-    }
-  ensure
-    begin
-      conn.exec("ROLLBACK")
-    rescue => e
-      puts "Could not roll back transaction: #{e.message}"
-    end
   end
 end
 

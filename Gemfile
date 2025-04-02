@@ -8,3 +8,5 @@ gem 'concurrent-ruby', '~> 1.2'
 gem 'pg', '~> 1.2'
 gem 'pry'
 
+
+gem 'faraday'
