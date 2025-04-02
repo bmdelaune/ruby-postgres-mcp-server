@@ -15,7 +15,7 @@ RUN bundle config set --local without 'development test' && \
     bundle install
 
 # Copy the model_context_protocol gem code
-COPY model_context_protocol/lib/ /app/lib/
+COPY model_context_protocol/lib/ ./model_context_protocol/lib/
 
 # Copy the application code
 COPY server.rb ./
@@ -35,7 +35,7 @@ COPY --from=builder /app /app
 WORKDIR /app
 
 # Set database connection to use local database
-ENV DATABASE_URL="postgresql://chadbuehrle:@host.docker.internal:5432/sample_Db"
+ENV DATABASE_URL="postgresql://bmdelaune:@host.docker.internal:5432/claude"
 
 # Make the server script executable
 RUN chmod +x server.rb

@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-$LOAD_PATH.unshift(File.expand_path(File.join(File.dirname(__FILE__), 'lib')))
 
 require 'json'
 require 'json-schema'
@@ -7,7 +6,7 @@ require 'dry-schema'
 require 'dry-validation'
 require 'concurrent'
 require 'pg'
-require "model_context_protocol"
+require './model_context_protocol/lib/model_context_protocol.rb'
 
 database_url = ENV["DATABASE_URL"]
 resource_base_url = URI.parse(database_url)
